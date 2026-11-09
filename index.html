@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>RawDrop – 무압축 전송</title>
+<script src="peerjs.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee;padding-bottom:110px}
+.wrap{max-width:640px;margin:auto;padding:16px}
+h1{font-size:20px;margin:4px 0 12px}
+button,label.btn{display:block;width:100%;padding:15px;margin:8px 0;border:0;border-radius:14px;font-size:16px;font-weight:600;background:#2d6cdf;color:#fff;text-align:center;cursor:pointer;font-family:inherit}
+button.sec,label.sec{background:#2a2a2a}button:disabled{opacity:.4}
+input[type=text]{width:100%;padding:12px;font-size:16px;border-radius:12px;border:1px solid #444;background:#1c1c1c;color:#fff}
+#code{font-size:28px;letter-spacing:8px;text-align:center}
+.code{font-size:46px;letter-spacing:10px;text-align:center;font-weight:700;margin:6px 0}
+.muted{color:#888;font-size:13px}.hide{display:none!important}
+.panel{background:#1a1a1a;border-radius:14px;padding:12px;margin:10px 0}
+.tool{display:flex;align-items:center;gap:8px;margin:10px 0 6px}.tool .cnt{flex:1;font-size:14px}
+.tool button{width:auto;margin:0;padding:8px 12px;font-size:13px}
+.bar{height:6px;background:#333;border-radius:3px;overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;width:0;background:#3ecf6e;transition:width .2s}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:pan-y}
+@media(min-width:560px){.grid{grid-template-columns:repeat(6,1fr)}}
+.cell{position:relative;aspect-ratio:1;background:#222;overflow:hidden;border-radius:4px;cursor:pointer}
+.cell img,.cell video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.cell .nm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;padding:4px;word-break:break-all;text-align:center}
+.cell .ck{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.35);font-size:13px;line-height:18px;text-align:center;color:#fff}
+.cell.sel .ck{background:#2d6cdf}.cell.sel .ck::after{content:'✓'}
+.cell.sel::after{content:'';position:absolute;inset:0;border:3px solid #2d6cdf;border-radius:4px;background:rgba(45,108,223,.15)}
+.cell .pg{position:absolute;left:0;bottom:0;height:4px;width:0;background:#3ecf6e;z-index:2}
+.cell .bd{position:absolute;left:4px;bottom:6px;font-size:11px;background:rgba(0,0,0,.6);padding:1px 5px;border-radius:6px;z-index:2}
+.cell.wait{opacity:.45}
+.actions{position:fixed;left:0;right:0;bottom:0;background:rgba(17,17,17,.95);padding:8px 16px calc(8px + env(safe-area-inset-bottom));border-top:1px solid #222;backdrop-filter:blur(8px)}
+.actions .in{max-width:640px;margin:auto;display:flex;gap:8px}.actions button{margin:0;font-size:14px;padding:14px 6px}
+label.chk{display:flex;gap:8px;align-items:center;font-size:14px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RawDrop <span class="muted">무압축 사진·영상 전송</span></h1>
+
+<!-- 홈 -->
+<div id="home">
+  <button id="bRecv">📥 받기</button>
+  <button id="bSend" class="sec">📤 보내기</button>
+  <p class="muted">두 폰을 같은 Wi-Fi(또는 한쪽 핫스팟)에 연결하면 폰끼리 직접 전송됩니다. 원본 바이트 그대로 — 재인코딩·압축 없음.</p>
+  <button id="bCollect" class="sec">📸 QR로 사진 모으기 (행사용)</button>
+  <button id="bInstall" class="hide">📲 앱으로 설치하기</button>
+  <p class="muted hide" id="iosInstall">📲 앱으로 쓰려면: Safari 아래 <b>공유 버튼 → 홈 화면에 추가</b></p>
+</div>
+
+<!-- QR 사진 모으기 -->
+<div id="collect" class="hide">
+  <p>손님이 QR을 찍어 보낸 원본 사진이 내 구글 드라이브에 모입니다.</p>
+  <div id="cSet">
+    <p class="muted">처음 한 번: 구글 PhotoDrop 웹 앱 주소(https://script.google.com/macros/s/…/exec)를 붙여넣으세요.</p>
+    <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+    <button id="bSaveUrl">저장</button>
+  </div>
+  <div id="cGo" class="hide">
+    <button id="bAdmin">🗂 방 만들기 · QR · 사진 관리 열기</button>
+    <button id="bEditUrl" class="sec">주소 변경</button>
+  </div>
+  <button id="bBack" class="sec">← 처음으로</button>
+</div>
+
+<!-- 받기 -->
+<div id="recv" class="hide">
+  <div class="panel">
+    <div class="muted">보내는 폰에 이 코드를 입력하세요</div>
+    <div class="code" id="myCode">······</div>
+    <div class="muted" id="rStat">연결 대기 중…</div>
+    <div class="bar"><i id="rBar"></i></div>
+  </div>
+  <div class="panel" id="dirPanel">
+    <button class="sec" id="bDir" style="margin-top:0">📁 저장 폴더 선택</button>
+    <div class="muted" id="dirName">선택 안 함</div>
+    <div style="margin-top:8px" class="muted">새 폴더 이름 (비우면 선택한 폴더에 바로 저장)</div>
+    <input type="text" id="sub">
+    <label class="chk"><input type="checkbox" id="auto" checked> 받는 즉시 이 폴더에 자동 저장</label>
+  </div>
+  <div class="tool"><span class="cnt" id="rCnt">받은 파일 0개</span><button class="sec" id="rAll">전체 선택</button><button class="sec" id="rNone">해제</button></div>
+  <div class="muted">길게 누른 채 드래그하면 여러 개를 한 번에 선택/해제합니다.</div>
+  <div class="grid" id="rGrid"></div>
+</div>
+
+<!-- 보내기 -->
+<div id="send" class="hide">
+  <input type="text" id="code" inputmode="numeric" maxlength="6" placeholder="받는 폰 코드 6자리" autocomplete="off">
+  <label class="btn sec" for="files">＋ 사진/동영상 추가</label>
+  <input type="file" id="files" multiple class="hide">
+  <p class="muted" id="iosTip">iPhone: 사진 선택 화면 상단 <b>옵션 → '현재'</b>를 선택해야 HEIC/HEVC 원본 그대로 전송됩니다. 선택 화면에서도 손가락으로 쓸어서 여러 장 선택 가능.</p>
+  <div class="tool"><span class="cnt" id="sCnt">0개 선택</span><button class="sec" id="sAll">전체 선택</button><button class="sec" id="sNone">해제</button><button class="sec" id="sDel">선택 삭제</button></div>
+  <div class="muted">길게 누른 채 드래그하면 여러 개를 한 번에 선택/해제합니다.</div>
+  <div class="grid" id="sGrid"></div>
+  <div class="panel hide" id="sPanel"><div class="muted" id="sStat"></div><div class="bar"><i id="sBar"></i></div></div>
+</div>
+</div>
+
+<div class="actions hide" id="rAct"><div class="in">
+  <button id="aDir">📁 폴더에 저장</button>
+  <button id="aShare">📤 사진·파일에 저장</button>
+  <button id="aDl" class="sec">💾 다운로드</button>
+</div></div>
+<div class="actions hide" id="sAct"><div class="in"><button id="bGo">전송 시작</button></div></div>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id), PFX='rawdrop-v1-';
+const Q=new URLSearchParams(location.search);
+const OPT=Q.get('host')?{host:Q.get('host'),port:+Q.get('port')||443,path:Q.get('path')||'/',secure:Q.get('secure')!=='0'}:{};
+const fmt=b=>b>=1e9?(b/1e9).toFixed(2)+' GB':b>=1e6?(b/1e6).toFixed(1)+' MB':Math.round(b/1e3)+' KB';
+const fmtT=s=>!isFinite(s)?'':s>=60?Math.floor(s/60)+'분 '+Math.round(s%60)+'초':Math.round(s)+'초';
+const IMG=/\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|dng)$/i, VID=/\.(mov|mp4|m4v|webm|3gp|mkv|avi)$/i;
+const show=id=>{['home','recv','send','collect'].forEach(x=>$(x).classList.toggle('hide',x!==id));$('rAct').classList.toggle('hide',id!=='recv');$('sAct').classList.toggle('hide',id!=='send');};
+let busy=false,wake=null;
+async function keepAwake(on){try{if(on&&!wake&&navigator.wakeLock){wake=await navigator.wakeLock.request('screen');wake.onrelease=()=>wake=null;}if(!on&&wake){await wake.release();wake=null;}}catch{}}
+document.addEventListener('visibilitychange',()=>{if(busy&&document.visibilityState==='visible')keepAwake(true);});
+addEventListener('beforeunload',e=>{if(busy){e.preventDefault();e.returnValue='';}});
+
+/* ================= 썸네일 그리드 + 드래그 선택 ================= */
+function Grid(el,onChange){
+  const items=[];let down=null,drag=null,timer=null,xy=null,raf=0;
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){io.unobserve(e.target);render(e.target._it);}}),{rootMargin:'400px'});
+  function add(it){
+    const c=document.createElement('div');c.className='cell';c.dataset.i=items.length;c._it=it;
+    c.innerHTML='<div class="nm"></div><div class="ck"></div><div class="pg"></div><div class="bd hide"></div>';
+    c.querySelector('.nm').textContent=it.name;it.cell=c;items.push(it);el.append(c);paint(it);
+    if(it.file)io.observe(c);return it;}
+  function setFile(it){it.cell.classList.remove('wait');io.observe(it.cell);}
+  function render(it){
+    const f=it.file;if(!f)return;const t=f.type||'';const url=it.url||(it.url=URL.createObjectURL(f));
+    if(t.startsWith('image/')||IMG.test(it.name)){const im=new Image();im.decoding='async';im.draggable=false;im.onload=()=>it.cell.querySelector('.nm').style.visibility='hidden';im.onerror=()=>{im.remove();badge(it,(it.name.split('.').pop()||'IMG').toUpperCase());};im.src=url;it.cell.prepend(im);}
+    else if(t.startsWith('video/')||VID.test(it.name)){const v=document.createElement('video');v.muted=true;v.playsInline=true;v.preload='metadata';
+      v.onloadedmetadata=()=>badge(it,'▶ '+Math.floor(v.duration/60)+':'+String(Math.floor(v.duration%60)).padStart(2,'0'));v.onerror=()=>{v.remove();badge(it,'▶');};
+      v.src=url+'#t=0.1';it.cell.prepend(v);}
+  }
+  function badge(it,txt){const b=it.cell.querySelector('.bd');b.textContent=txt;b.classList.remove('hide');}
+  function paint(it){it.cell.classList.toggle('sel',!!it.sel);}
+  const idxAt=(x,y)=>{const c=document.elementFromPoint(x,y)?.closest?.('.cell');return c&&el.contains(c)?+c.dataset.i:-1;};
+  function apply(cur){const a=Math.min(drag.start,cur),b=Math.max(drag.start,cur);
+    items.forEach((it,k)=>{const v=k>=a&&k<=b?drag.mode:drag.snap[k];if(it.sel!==v){it.sel=v;paint(it);}});onChange();}
+  function begin(i){drag={start:i,last:i,mode:!items[i].sel,snap:items.map(x=>x.sel)};apply(i);navigator.vibrate?.(15);loop();}
+  function loop(){if(!drag)return;if(xy){const[x,y]=xy,h=innerHeight;
+      if(y<80)scrollBy(0,-Math.max(4,(80-y)/3));else if(y>h-130)scrollBy(0,Math.max(4,(y-(h-130))/3));
+      const i=idxAt(x,y);if(i>=0&&i!==drag.last){drag.last=i;apply(i);}}raf=requestAnimationFrame(loop);}
+  el.addEventListener('pointerdown',e=>{const c=e.target.closest('.cell');if(!c||e.button>0)return;const i=+c.dataset.i;
+    down={i,x:e.clientX,y:e.clientY,moved:false};xy=[e.clientX,e.clientY];
+    if(e.pointerType==='mouse')begin(i);else timer=setTimeout(()=>begin(i),280);});
+  addEventListener('pointermove',e=>{if(!down)return;xy=[e.clientX,e.clientY];
+    if(!drag&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>10){clearTimeout(timer);down.moved=true;}});
+  const end=e=>{clearTimeout(timer);cancelAnimationFrame(raf);
+    if(down&&!drag&&!down.moved&&e.type==='pointerup'){const it=items[down.i];it.sel=!it.sel;paint(it);onChange();}
+    down=null;drag=null;xy=null;};
+  addEventListener('pointerup',end);addEventListener('pointercancel',end);
+  el.addEventListener('touchmove',e=>{if(drag)e.preventDefault();},{passive:false});
+  el.addEventListener('contextmenu',e=>e.preventDefault());
+  return{items,add,setFile,badge,paint,
+    all(v){items.forEach(it=>{it.sel=v;paint(it);});onChange();},
+    sel(){return items.filter(it=>it.sel);},
+    remove(list){list.forEach(it=>{it.cell.remove();if(it.url)URL.revokeObjectURL(it.url);});const keep=items.filter(it=>!list.includes(it));items.length=0;
+      keep.forEach((it,k)=>{it.cell.dataset.i=k;items.push(it);});onChange();}};
+}
+
+/* ================= 받기 ================= */
+let rg,opfs=null,dirRoot=null,conn0=null;
+$('bRecv').onclick=async()=>{show('recv');await initStore();setupSave();startRecv();};
+async function initStore(){
+  try{const r=await navigator.storage.getDirectory();
+    for await(const k of r.keys())await r.removeEntry(k,{recursive:true}).catch(()=>{});
+    const h=await r.getFileHandle('__probe',{create:true});const w=await h.createWritable();await w.write(new Uint8Array(1));await w.close();await r.removeEntry('__probe');
+    opfs=r;navigator.storage.persist?.();
+  }catch{opfs=null;}
+}
+function updR(){const s=rg.sel(),n=rg.items.filter(i=>i.file).length;
+  $('rCnt').textContent=`받은 파일 ${n}개 · ${s.length}개 선택 (${fmt(s.reduce((a,b)=>a+b.size,0))})`;
+  const ready=s.filter(i=>i.file).length>0;['aDir','aShare','aDl'].forEach(id=>$(id).disabled=!ready);}
+function setupSave(){
+  rg=Grid($('rGrid'),updR);
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  $('sub').value=`RawDrop_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  if(!('showDirectoryPicker'in window)){$('dirPanel').classList.add('hide');$('aDir').classList.add('hide');}
+  const probe=new File([''],'a.jpg',{type:'image/jpeg'});
+  if(!(navigator.canShare&&navigator.canShare({files:[probe]})))$('aShare').classList.add('hide');
+  $('bDir').onclick=pickDir;$('aDir').onclick=saveSelToDir;$('aShare').onclick=shareSel;$('aDl').onclick=dlSel;
+  $('rAll').onclick=()=>rg.all(true);$('rNone').onclick=()=>rg.all(false);updR();
+}
+async function pickDir(){try{dirRoot=await showDirectoryPicker({id:'rawdrop',mode:'readwrite',startIn:'pictures'});$('dirName').textContent='📁 '+dirRoot.name+($('sub').value.trim()?' / '+$('sub').value.trim():'');return true;}catch{return false;}}
+$('sub').oninput=()=>{if(dirRoot)$('dirName').textContent='📁 '+dirRoot.name+($('sub').value.trim()?' / '+$('sub').value.trim():'');};
+async function targetDir(){const s=$('sub').value.trim().replace(/[\\/:*?"<>|]/g,'_');return s?dirRoot.getDirectoryHandle(s,{create:true}):dirRoot;}
+async function freeName(dir,name){const m=name.match(/^(.*?)(\.[^.]*)?$/);let n=name,k=1;
+  for(;;){try{await dir.getFileHandle(n);n=`${m[1]} (${k++})${m[2]||''}`;}catch{return n;}}}
+const saved=it=>{it.saved=true;rg.badge(it,'✓ 저장됨');};
+let dirQ=Promise.resolve();
+function saveToDir(it){return dirQ=dirQ.then(async()=>{if(it.saved)return;const d=await targetDir();
+  let fh;try{fh=await d.getFileHandle(await freeName(d,it.name),{create:true});}catch{fh=await d.getFileHandle(await freeName(d,it.name.replace(/[^\x20-\x7e]/g,'_')),{create:true});}await it.file.stream().pipeTo(await fh.createWritable());saved(it);}).catch(e=>{alert('폴더 저장 실패: '+e.message);});}
+async function saveSelToDir(){if(!dirRoot&&!await pickDir())return;
+  const list=rg.sel().filter(i=>i.file&&!i.saved);$('rStat').textContent=`폴더에 저장 중… 0/${list.length}`;
+  let k=0;for(const it of list){await saveToDir(it);$('rStat').textContent=`폴더에 저장 중… ${++k}/${list.length}`;}
+  $('rStat').textContent=`✅ ${list.length}개를 '${dirRoot.name}${$('sub').value.trim()?'/'+$('sub').value.trim():''}'에 저장`;}
+// iOS/안드로이드 공유 시트: 묶음 단위(사용자 탭 1번 = 1묶음)
+let shareQ=null;
+async function shareSel(){
+  if(!shareQ){const list=rg.sel().filter(i=>i.file);shareQ={b:[],k:0};let cur=[],sz=0;
+    for(const it of list){if(cur.length&&(cur.length>=40||sz+it.size>1.5e9)){shareQ.b.push(cur);cur=[];sz=0;}cur.push(it);sz+=it.size;}
+    if(cur.length)shareQ.b.push(cur);}
+  const batch=shareQ.b[shareQ.k];
+  try{await navigator.share({files:batch.map(i=>i.file)});batch.forEach(saved);shareQ.k++;}
+  catch(e){if(e.name!=='AbortError')alert('공유 실패: '+e.message);}
+  if(shareQ.k>=shareQ.b.length){shareQ=null;$('aShare').textContent='📤 사진·파일에 저장';}
+  else $('aShare').textContent=`📤 다음 묶음 저장 (${shareQ.k+1}/${shareQ.b.length})`;
+}
+async function dlSel(){const list=rg.sel().filter(i=>i.file);
+  for(const it of list){const a=document.createElement('a');a.href=it.url||(it.url=URL.createObjectURL(it.file));a.download=it.name;document.body.append(a);a.click();a.remove();saved(it);await new Promise(r=>setTimeout(r,350));}}
+
+function startRecv(){
+  const code=String(Math.floor(100000+Math.random()*900000));
+  const peer=new Peer(PFX+code,OPT);
+  peer.on('open',()=>{$('myCode').textContent=code;});
+  peer.on('error',e=>{if(e.type==='unavailable-id'){peer.destroy();startRecv();}else $('rStat').textContent='오류: '+e.type;});
+  peer.on('connection',conn=>{
+    conn0=conn;$('rStat').textContent='연결됨 – 수신 대기';
+    let cur=null,q=Promise.resolve(),job={count:0,total:0,done:0,files:0,t0:0},lastUI=0;
+    conn.on('data',d=>{q=q.then(()=>handle(d)).catch(e=>{$('rStat').textContent='수신 오류: '+e.message;});});
+    conn.on('close',()=>{if(busy){busy=false;keepAwake(false);$('rStat').textContent='⚠️ 연결 끊김';}});
+    async function handle(d){
+      if(typeof d==='string'){const m=JSON.parse(d);
+        if(m.t==='batch'){job={count:m.count,total:m.total,done:0,files:0,t0:performance.now()};busy=true;keepAwake(true);
+          if(!opfs&&m.total>1.5e9)$('rStat').textContent='⚠️ 이 브라우저는 메모리에 받습니다. 1.5GB 이상이면 나눠 보내세요';}
+        else if(m.t==='meta'){cur={name:m.name,size:m.size,type:m.type,mtime:m.mtime,got:0,sel:true};rg.add(cur).cell.classList.add('wait');
+          if(opfs){cur.fh=await opfs.getFileHandle('f'+rg.items.length,{create:true});cur.w=await cur.fh.createWritable();}else cur.parts=[];
+          if(!m.size)await finish();}
+        else if(m.t==='bye'){busy=false;keepAwake(false);
+          $('rStat').textContent=`✅ ${job.files}개 · ${fmt(job.done)} 수신 완료 (${fmtT((performance.now()-job.t0)/1000)})`;$('rBar').style.width='100%';}
+        return;}
+      const buf=d instanceof ArrayBuffer?d:d.buffer?d.buffer.slice(d.byteOffset,d.byteOffset+d.byteLength):await new Blob([d]).arrayBuffer();
+      if(cur.w)await cur.w.write(buf);else cur.parts.push(buf);
+      cur.got+=buf.byteLength;job.done+=buf.byteLength;
+      const now=performance.now();if(now-lastUI>150||cur.got>=cur.size){lastUI=now;
+        cur.cell.querySelector('.pg').style.width=(100*cur.got/cur.size)+'%';
+        const sp=job.done/((now-job.t0)/1000);$('rBar').style.width=(100*job.done/job.total)+'%';
+        $('rStat').textContent=`수신 중 ${job.files+1}/${job.count} · ${fmt(job.done)} / ${fmt(job.total)} · ${fmt(sp)}/s · 남은 시간 ${fmtT((job.total-job.done)/sp)}`;}
+      if(cur.got>=cur.size)await finish();
+    }
+    async function finish(){
+      const f=cur;cur=null;let blob;
+      if(f.w){await f.w.close();blob=await f.fh.getFile();}else{blob=new Blob(f.parts);f.parts=null;}
+      f.file=new File([blob],f.name,{type:f.type||'application/octet-stream',lastModified:f.mtime});
+      f.cell.querySelector('.pg').style.width='0';rg.setFile(f);job.files++;
+      if(f.file.size!==f.size)rg.badge(f,'⚠️ 크기 불일치');
+      updR();conn.send(JSON.stringify({t:'ack',ok:f.file.size===f.size}));
+      if(dirRoot&&$('auto').checked)saveToDir(f);
+    }
+  });
+}
+
+/* ================= 보내기 ================= */
+let sg;
+$('bSend').onclick=()=>{show('send');if(!sg)sg=Grid($('sGrid'),updS);updS();};
+if(!/iP(hone|ad|od)|Macintosh.*Mobile/.test(navigator.userAgent)&&!(navigator.maxTouchPoints>1&&/Mac/.test(navigator.userAgent)))$('iosTip').classList.add('hide');
+function updS(){const s=sg.sel();$('sCnt').textContent=`${sg.items.length}개 중 ${s.length}개 선택 (${fmt(s.reduce((a,b)=>a+b.size,0))})`;
+  $('bGo').disabled=busy||!s.length;$('bGo').textContent=busy?'전송 중…':`${s.length}개 전송 시작`;}
+function addFiles(list){for(const f of list)sg.add({file:f,name:f.name,size:f.size,type:f.type,sel:true});updS();}
+$('files').onchange=e=>{addFiles([...e.target.files]);e.target.value='';};
+$('sAll').onclick=()=>sg.all(true);$('sNone').onclick=()=>sg.all(false);$('sDel').onclick=()=>{if(!busy)sg.remove(sg.sel());};
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();if(!$('send').classList.contains('hide'))addFiles([...e.dataTransfer.files]);});
+$('bGo').onclick=()=>{
+  const code=$('code').value.trim();
+  if(!/^\d{6}$/.test(code))return alert('받는 폰의 6자리 코드를 입력하세요');
+  const list=sg.sel();if(!list.length)return;
+  busy=true;updS();keepAwake(true);$('sPanel').classList.remove('hide');$('sStat').textContent='연결 중…';
+  const peer=new Peer(OPT);
+  const fail=msg=>{busy=false;keepAwake(false);updS();$('sStat').textContent=msg;peer.destroy();};
+  peer.on('error',e=>fail(e.type==='peer-unavailable'?'❌ 코드를 찾을 수 없습니다 (받는 폰에서 받기 화면이 열려 있는지 확인)':'오류: '+e.type));
+  peer.on('open',()=>{const conn=peer.connect(PFX+code,{reliable:true,serialization:'raw'});
+    conn.on('open',()=>sendAll(conn,list).then(()=>{busy=false;keepAwake(false);updS();}).catch(e=>fail('⚠️ 전송 중단: '+e.message)));});
+};
+async function sendAll(conn,list){
+  const dc=conn.dataChannel,pc=conn.peerConnection;
+  const CH=Math.max(16384,Math.min(pc.sctp?.maxMessageSize||65536,65536)),HIGH=8<<20;
+  dc.bufferedAmountLowThreshold=2<<20;
+  const drain=()=>new Promise((res,rej)=>{if(dc.readyState!=='open')return rej(new Error('연결 끊김'));if(dc.bufferedAmount<HIGH)return res();
+    const t=()=>{dc.removeEventListener('close',c);res();},c=()=>rej(new Error('연결 끊김'));dc.addEventListener('bufferedamountlow',t,{once:true});dc.addEventListener('close',c,{once:true});});
+  const total=list.reduce((a,b)=>a+b.size,0),t0=performance.now();let sent=0,lastUI=0;
+  conn.send(JSON.stringify({t:'batch',count:list.length,total}));
+  for(let n=0;n<list.length;n++){const it=list[n],f=it.file,pg=it.cell.querySelector('.pg');
+    conn.send(JSON.stringify({t:'meta',name:f.name,size:f.size,type:f.type,mtime:f.lastModified}));
+    for(let off=0;off<f.size;){
+      const slab=await f.slice(off,off+(4<<20)).arrayBuffer();   // 원본 바이트 그대로
+      for(let p=0;p<slab.byteLength;p+=CH){await drain();dc.send(slab.slice(p,p+CH));}
+      off+=slab.byteLength;sent+=slab.byteLength;
+      const now=performance.now();if(now-lastUI>150||off>=f.size){lastUI=now;pg.style.width=(100*off/f.size)+'%';
+        const sp=sent/((now-t0)/1000);$('sBar').style.width=(100*sent/total)+'%';
+        $('sStat').textContent=`전송 중 ${n+1}/${list.length} · ${fmt(sent)} / ${fmt(total)} · ${fmt(sp)}/s · 남은 시간 ${fmtT((total-sent)/sp)}`;}
+    }
+    if(!f.size)pg.style.width='100%';sg.badge(it,'✓ 전송');
+  }
+  await drain();conn.send(JSON.stringify({t:'bye'}));
+  $('sStat').textContent=`✅ ${list.length}개 · ${fmt(total)} 전송 완료 (${fmtT((performance.now()-t0)/1000)})`;
+}
+/* ---------- QR 사진 모으기 (구글 드라이브 PhotoDrop 연결) ---------- */
+const gasGet=()=>localStorage.getItem('gas_url')||'';
+function collectUI(){const u=gasGet();$('cSet').classList.toggle('hide',!!u);$('cGo').classList.toggle('hide',!u);$('gasUrl').value=u;}
+$('bCollect').onclick=()=>{show('collect');collectUI();};
+$('bBack').onclick=()=>show('home');
+$('bSaveUrl').onclick=()=>{const u=$('gasUrl').value.trim().replace(/\?.*$/,'');
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u))return alert('주소 형식이 맞지 않아요.\n예: https://script.google.com/macros/s/……/exec');
+  localStorage.setItem('gas_url',u);collectUI();};
+$('bEditUrl').onclick=()=>{localStorage.removeItem('gas_url');collectUI();};
+$('bAdmin').onclick=()=>window.open(gasGet()+'?admin','_blank');
+/* ---------- 앱 설치 ---------- */
+let installEvt=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;$('bInstall').classList.remove('hide');});
+$('bInstall').onclick=async()=>{if(!installEvt)return;installEvt.prompt();await installEvt.userChoice;installEvt=null;$('bInstall').classList.add('hide');};
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+if(!standalone&&/iP(hone|ad|od)/.test(navigator.userAgent))$('iosInstall').classList.remove('hide');
+if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body></html>
